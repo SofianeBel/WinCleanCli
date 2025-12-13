@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 
 vi.mock('../scanners/index.js', async () => {
-  const actual = await vi.importActual<typeof import('../scanners/index.js')>('../scanners/index.js');
   return {
-    ...actual,
+    getScanner: () => {
+      throw new Error('getScanner should not be called in this test');
+    },
     getAllScanners: () => [],
     runAllScans: async () => ({ results: [], totalSize: 0, totalItems: 0 }),
     runScans: async () => ({ results: [], totalSize: 0, totalItems: 0 }),
