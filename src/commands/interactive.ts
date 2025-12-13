@@ -82,7 +82,8 @@ export async function interactiveCommand(options: InteractiveOptions = {}): Prom
   }
 
   console.log();
-  console.log(chalk.bold(`Found ${chalk.green(formatSize(summary.totalSize))} that can be cleaned:`));
+  const visibleSize = resultsWithItems.reduce((sum, r) => sum + r.totalSize, 0);
+  console.log(chalk.bold(`Found ${chalk.green(formatSize(visibleSize))} that can be cleaned:`));
   console.log();
 
   const defaultSelected = config.defaultCategories?.length ? new Set(config.defaultCategories) : undefined;

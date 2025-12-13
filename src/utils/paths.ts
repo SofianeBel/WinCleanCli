@@ -8,7 +8,7 @@ const LOCALAPPDATA = process.env.LOCALAPPDATA || join(HOME, 'AppData', 'Local');
 const WINDIR = process.env.WINDIR || 'C:\\Windows';
 
 export const PATHS = {
-  userCaches: join(LOCALAPPDATA, 'Temp'),
+  userCaches: join(LOCALAPPDATA, 'Microsoft', 'Windows', 'INetCache'),
   systemTemp: join(WINDIR, 'Temp'),
   userTemp: process.env.TEMP || join(LOCALAPPDATA, 'Temp'),
   userLogs: join(LOCALAPPDATA, 'CrashDumps'),
@@ -62,4 +62,3 @@ export function isSystemPath(path: string): boolean {
   ];
   return systemPaths.some((p) => path.toLowerCase().startsWith(p.toLowerCase()));
 }
-

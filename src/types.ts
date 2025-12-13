@@ -80,9 +80,9 @@ export interface Scanner {
 export const CATEGORIES: Record<CategoryId, Category> = {
   'system-cache': {
     id: 'system-cache',
-    name: 'User Cache Files',
+    name: 'Windows Internet Cache',
     group: 'System Junk',
-    description: 'Application caches stored in AppData\\Local',
+    description: 'Windows internet cache (INetCache)',
     safetyLevel: 'moderate',
     safetyNote: 'Some apps may need to rebuild cache on next launch',
   },

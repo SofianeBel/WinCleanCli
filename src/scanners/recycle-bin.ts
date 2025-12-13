@@ -4,6 +4,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 
 const execAsync = promisify(exec);
+const POWERSHELL = 'powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass';
 
 export class RecycleBinScanner extends BaseScanner {
   category = CATEGORIES['recycle-bin'];
@@ -13,7 +14,7 @@ export class RecycleBinScanner extends BaseScanner {
 
     try {
       const { stdout } = await execAsync(
-        'powershell -Command "(New-Object -ComObject Shell.Application).NameSpace(10).Items() | ForEach-Object { $_.Size }"',
+        `${POWERSHELL} -Command "(New-Object -ComObject Shell.Application).NameSpace(10).Items() | ForEach-Object { $_.Size }"`,
         { shell: 'cmd.exe' }
       );
 
@@ -57,13 +58,15 @@ export class RecycleBinScanner extends BaseScanner {
 
     try {
       const beforeSize = items.reduce((sum, item) => sum + item.size, 0);
-      await execAsync(
-        'powershell -Command "Clear-RecycleBin -Force -ErrorAction SilentlyContinue"',
-        { shell: 'cmd.exe' }
-      );
+      await execAsync(`${POWERSHELL} -Command "Clear-RecycleBin -Force -Confirm:$false -ErrorAction SilentlyContinue"`, {
+        shell: 'cmd.exe',
+      });
       freedSpace = beforeSize;
     } catch (error) {
-      errors.push(`Failed to empty Recycle Bin: ${error}`);
+      const stderr =
+        error && typeof error === 'object' && 'stderr' in error ? String((error as { stderr?: unknown }).stderr) : '';
+      const details = stderr.trim() ? ` (${stderr.trim()})` : '';
+      errors.push(`Failed to empty Recycle Bin${details}`);
     }
 
     return {
@@ -74,4 +77,3 @@ export class RecycleBinScanner extends BaseScanner {
     };
   }
 }
-
