@@ -2,21 +2,80 @@
 
 import { Command } from 'commander';
 import { ExitPromptError } from '@inquirer/core';
-import { interactiveCommand, listCategories, maintenanceCommand, uninstallCommand } from './commands/index.js';
+import { readFileSync } from 'fs';
+import { cleanCommand, interactiveCommand, listCategories, maintenanceCommand, scanCommand, uninstallCommand } from './commands/index.js';
 import { initConfig, configExists, listBackups, cleanOldBackups, loadConfig, formatSize } from './utils/index.js';
+import { CATEGORIES, type CategoryId } from './types.js';
 
 const program = new Command();
 
+function getPackageMetadata(): { name?: string; version?: string; description?: string } {
+  try {
+    const raw = readFileSync(new URL('../package.json', import.meta.url), 'utf8');
+    return JSON.parse(raw) as { name?: string; version?: string; description?: string };
+  } catch {
+    return {};
+  }
+}
+
+function parseCategoryId(value: string): CategoryId {
+  if (value in CATEGORIES) return value as CategoryId;
+  throw new Error(`Unknown category: ${value}. Use "windows-cleaner-cli categories" to list valid IDs.`);
+}
+
+const pkg = getPackageMetadata();
+
 program
-  .name('windows-cleaner')
-  .description('Open source CLI tool to clean your Windows PC')
-  .version('1.0.0')
+  .name(pkg.name ?? 'windows-cleaner-cli')
+  .description(pkg.description ?? 'Open source CLI tool to clean your Windows PC')
+  .version(pkg.version ?? '0.0.0')
   .option('-r, --risky', 'Include risky categories (downloads, iTunes backups, etc)')
   .option('--no-progress', 'Disable progress bar')
   .action(async (options) => {
     try {
       await interactiveCommand({
         includeRisky: options.risky,
+        noProgress: !options.progress,
+      });
+    } catch (error) {
+      if (error instanceof ExitPromptError) return;
+      throw error;
+    }
+  });
+
+program
+  .command('scan')
+  .description('Scan your PC and show what can be cleaned')
+  .option('-r, --risky', 'Include risky categories')
+  .option('-c, --category <id>', 'Scan a single category', parseCategoryId)
+  .option('-v, --verbose', 'Show top items per category')
+  .option('--no-progress', 'Disable progress bar')
+  .action(async (options) => {
+    await scanCommand({
+      category: options.category,
+      includeRisky: options.risky,
+      verbose: options.verbose,
+      noProgress: !options.progress,
+    });
+  });
+
+program
+  .command('clean')
+  .description('Clean selected categories (non-interactive friendly)')
+  .option('-a, --all', 'Clean all selected categories without per-category prompts')
+  .option('-r, --risky', 'Include risky categories')
+  .option('-y, --yes', 'Skip confirmation prompts')
+  .option('-d, --dry-run', 'Show what would be removed without actually removing')
+  .option('-c, --category <id>', 'Clean a single category', parseCategoryId)
+  .option('--no-progress', 'Disable progress bar')
+  .action(async (options) => {
+    try {
+      await cleanCommand({
+        all: options.all,
+        includeRisky: options.risky,
+        yes: options.yes,
+        dryRun: options.dryRun,
+        category: options.category,
         noProgress: !options.progress,
       });
     } catch (error) {
@@ -128,4 +187,3 @@ program
   });
 
 program.parse();
-

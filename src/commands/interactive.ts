@@ -3,7 +3,7 @@ import confirm from '@inquirer/confirm';
 import checkbox from '@inquirer/checkbox';
 import type { CategoryId, CleanSummary, CleanableItem, ScanResult, SafetyLevel } from '../types.js';
 import { runAllScans, getScanner, getAllScanners } from '../scanners/index.js';
-import { formatSize, createScanProgress, createCleanProgress } from '../utils/index.js';
+import { createCleanProgress, createScanProgress, expandPath, formatSize, loadConfig } from '../utils/index.js';
 
 const SAFETY_ICONS: Record<SafetyLevel, string> = {
   safe: chalk.green('●'),
@@ -17,6 +17,7 @@ interface InteractiveOptions {
 }
 
 export async function interactiveCommand(options: InteractiveOptions = {}): Promise<CleanSummary | null> {
+  const config = await loadConfig();
   console.log();
   console.log(chalk.bold.cyan('🧹 Windows Cleaner CLI'));
   console.log(chalk.dim('─'.repeat(50)));
@@ -29,8 +30,20 @@ export async function interactiveCommand(options: InteractiveOptions = {}): Prom
   console.log(chalk.cyan('Scanning your PC for cleanable files...\n'));
 
   const summary = await runAllScans({
-    parallel: true,
-    concurrency: 4,
+    parallel: config.parallelScans ?? true,
+    concurrency: config.concurrency ?? 4,
+    optionsForScanner: (scanner: { category: { id: CategoryId } }) => {
+      if (scanner.category.id === 'downloads' && typeof config.downloadsDaysOld === 'number') {
+        return { daysOld: config.downloadsDaysOld };
+      }
+      if (scanner.category.id === 'large-files' && typeof config.largeFilesMinSize === 'number') {
+        return { minSize: config.largeFilesMinSize };
+      }
+      if (scanner.category.id === 'node-modules' && config.extraPaths?.nodeModules?.length) {
+        return { searchPaths: config.extraPaths.nodeModules.map(expandPath) };
+      }
+      return undefined;
+    },
     onProgress: (completed, _total, scanner) => {
       scanProgress?.update(completed, `Scanning ${scanner.category.name}...`);
     },
@@ -43,7 +56,10 @@ export async function interactiveCommand(options: InteractiveOptions = {}): Prom
     return null;
   }
 
-  let resultsWithItems = summary.results.filter((r) => r.items.length > 0);
+  const excluded = new Set(config.excludeCategories ?? []);
+  let resultsWithItems = summary.results
+    .filter((r) => r.items.length > 0)
+    .filter((r) => !excluded.has(r.category.id));
 
   const riskyResults = resultsWithItems.filter((r) => r.category.safetyLevel === 'risky');
   const safeResults = resultsWithItems.filter((r) => r.category.safetyLevel !== 'risky');
@@ -69,7 +85,8 @@ export async function interactiveCommand(options: InteractiveOptions = {}): Prom
   console.log(chalk.bold(`Found ${chalk.green(formatSize(summary.totalSize))} that can be cleaned:`));
   console.log();
 
-  const selectedItems = await selectItemsInteractively(resultsWithItems, options.includeRisky);
+  const defaultSelected = config.defaultCategories?.length ? new Set(config.defaultCategories) : undefined;
+  const selectedItems = await selectItemsInteractively(resultsWithItems, defaultSelected);
 
   if (selectedItems.length === 0) {
     console.log(chalk.yellow('\nNo items selected. Nothing to clean.\n'));
@@ -126,7 +143,7 @@ export async function interactiveCommand(options: InteractiveOptions = {}): Prom
 
 async function selectItemsInteractively(
   results: ScanResult[],
-  _includeRisky = false
+  defaultSelected?: Set<CategoryId>
 ): Promise<{ categoryId: CategoryId; items: CleanableItem[] }[]> {
   const choices = results.map((r) => {
     const safetyIcon = SAFETY_ICONS[r.category.safetyLevel];
@@ -135,7 +152,7 @@ async function selectItemsInteractively(
     return {
       name: `${safetyIcon} ${r.category.name.padEnd(28)} ${chalk.yellow(formatSize(r.totalSize).padStart(10))} ${chalk.dim(`(${r.items.length} items)`)}`,
       value: r.category.id,
-      checked: !isRisky,
+      checked: defaultSelected ? defaultSelected.has(r.category.id) : !isRisky,
     };
   });
 
@@ -220,4 +237,3 @@ function printCleanResults(summary: CleanSummary): void {
 
   console.log();
 }
-

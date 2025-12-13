@@ -2,7 +2,7 @@ import chalk from 'chalk';
 import type { CategoryId, CategoryGroup, ScanSummary, ScanResult, SafetyLevel } from '../types.js';
 import { CATEGORIES } from '../types.js';
 import { runAllScans, runScans, getAllScanners } from '../scanners/index.js';
-import { formatSize, createScanProgress } from '../utils/index.js';
+import { createScanProgress, expandPath, formatSize, loadConfig } from '../utils/index.js';
 
 const SAFETY_ICONS: Record<SafetyLevel, string> = {
   safe: chalk.green('●'),
@@ -12,11 +12,13 @@ const SAFETY_ICONS: Record<SafetyLevel, string> = {
 
 interface ScanCommandOptions {
   category?: CategoryId;
+  includeRisky?: boolean;
   verbose?: boolean;
   noProgress?: boolean;
 }
 
 export async function scanCommand(options: ScanCommandOptions): Promise<ScanSummary> {
+  const config = await loadConfig();
   const scanners = options.category ? [options.category] : getAllScanners().map((s) => s.category.id);
   const total = scanners.length;
   const showProgress = !options.noProgress && process.stdout.isTTY;
@@ -25,10 +27,26 @@ export async function scanCommand(options: ScanCommandOptions): Promise<ScanSumm
 
   let summary: ScanSummary;
 
-  const scanOptions = {
+  const baseScannerOptions = {
     verbose: options.verbose,
-    parallel: true,
-    concurrency: 4,
+  };
+
+  const scanOptions = {
+    ...baseScannerOptions,
+    parallel: config.parallelScans ?? true,
+    concurrency: config.concurrency ?? 4,
+    optionsForScanner: (scanner: { category: { id: CategoryId } }) => {
+      if (scanner.category.id === 'downloads' && typeof config.downloadsDaysOld === 'number') {
+        return { ...baseScannerOptions, daysOld: config.downloadsDaysOld };
+      }
+      if (scanner.category.id === 'large-files' && typeof config.largeFilesMinSize === 'number') {
+        return { ...baseScannerOptions, minSize: config.largeFilesMinSize };
+      }
+      if (scanner.category.id === 'node-modules' && config.extraPaths?.nodeModules?.length) {
+        return { ...baseScannerOptions, searchPaths: config.extraPaths.nodeModules.map(expandPath) };
+      }
+      return undefined;
+    },
     onProgress: (completed: number, _total: number, scanner: { category: { name: string } }) => {
       progress?.update(completed, `Scanning ${scanner.category.name}...`);
     },
@@ -42,9 +60,26 @@ export async function scanCommand(options: ScanCommandOptions): Promise<ScanSumm
 
   progress?.finish();
 
-  printScanResults(summary, options.verbose);
+  const excluded = new Set(config.excludeCategories ?? []);
+  let results = summary.results;
 
-  return summary;
+  if (!options.includeRisky) {
+    results = results.filter((r) => r.category.safetyLevel !== 'risky');
+  }
+
+  if (excluded.size > 0) {
+    results = results.filter((r) => !excluded.has(r.category.id));
+  }
+
+  const filteredSummary: ScanSummary = {
+    results,
+    totalSize: results.reduce((sum, r) => sum + r.totalSize, 0),
+    totalItems: results.reduce((sum, r) => sum + r.items.length, 0),
+  };
+
+  printScanResults(filteredSummary, options.verbose);
+
+  return filteredSummary;
 }
 
 function printScanResults(summary: ScanSummary, verbose = false): void {
@@ -91,7 +126,7 @@ function printScanResults(summary: ScanSummary, verbose = false): void {
     chalk.bold(`Total: ${chalk.green(formatSize(summary.totalSize))} can be cleaned (${summary.totalItems} items)`)
   );
   console.log();
-  console.log(chalk.dim('Safety: ') + `${SAFETY_ICONS.safe} safe  ${SAFETY_ICONS.moderate} moderate  ${SAFETY_ICONS.risky} risky (use --unsafe)`);
+  console.log(chalk.dim('Safety: ') + `${SAFETY_ICONS.safe} safe  ${SAFETY_ICONS.moderate} moderate  ${SAFETY_ICONS.risky} risky (use --risky)`);
   console.log();
 }
 
@@ -142,7 +177,6 @@ export function listCategories(): void {
   }
 
   console.log();
-  console.log(chalk.dim('Safety: ') + `${SAFETY_ICONS.safe} safe  ${SAFETY_ICONS.moderate} moderate  ${SAFETY_ICONS.risky} risky (requires --unsafe)`);
+  console.log(chalk.dim('Safety: ') + `${SAFETY_ICONS.safe} safe  ${SAFETY_ICONS.moderate} moderate  ${SAFETY_ICONS.risky} risky (requires --risky)`);
   console.log();
 }
-

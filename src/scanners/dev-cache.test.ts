@@ -1,5 +1,13 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { DevCacheScanner } from './dev-cache.js';
+
+vi.mock('../utils/index.js', async () => {
+  const actual = await vi.importActual<typeof import('../utils/index.js')>('../utils/index.js');
+  return {
+    ...actual,
+    getSize: async () => 0,
+  };
+});
 
 describe('DevCacheScanner', () => {
   it('should have correct category', () => {
@@ -19,4 +27,3 @@ describe('DevCacheScanner', () => {
     expect(Array.isArray(result.items)).toBe(true);
   });
 });
-

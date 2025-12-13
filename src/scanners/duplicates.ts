@@ -12,7 +12,7 @@ const DEFAULT_SEARCH_PATHS = [
 ];
 
 const MIN_FILE_SIZE = 1024 * 1024;
-const MAX_DEPTH = 5;
+const DEFAULT_MAX_DEPTH = 5;
 
 interface FileInfo {
   path: string;
@@ -25,11 +25,13 @@ export class DuplicatesScanner extends BaseScanner {
 
   async scan(options?: ScannerOptions): Promise<ScanResult> {
     const minSize = options?.minSize ?? MIN_FILE_SIZE;
+    const maxDepth = options?.maxDepth ?? DEFAULT_MAX_DEPTH;
+    const searchPaths = options?.searchPaths ?? DEFAULT_SEARCH_PATHS;
     const filesBySize = new Map<number, FileInfo[]>();
 
-    for (const searchPath of DEFAULT_SEARCH_PATHS) {
+    for (const searchPath of searchPaths) {
       if (await exists(searchPath)) {
-        await this.collectFiles(searchPath, filesBySize, minSize, MAX_DEPTH);
+        await this.collectFiles(searchPath, filesBySize, minSize, maxDepth);
       }
     }
 
@@ -140,4 +142,3 @@ export class DuplicatesScanner extends BaseScanner {
     return parts[parts.length - 1] || path;
   }
 }
-

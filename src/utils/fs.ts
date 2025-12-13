@@ -178,3 +178,41 @@ export async function removeItems(
   return { success, failed, freedSpace };
 }
 
+export async function emptyDirectory(
+  dirPath: string,
+  dryRun = false,
+  onProgress?: (current: number, total: number, entryName: string) => void
+): Promise<{ success: number; failed: number }> {
+  let success = 0;
+  let failed = 0;
+
+  if (dryRun) {
+    try {
+      const entries = await readdir(dirPath);
+      return { success: entries.length, failed: 0 };
+    } catch {
+      return { success: 0, failed: 0 };
+    }
+  }
+
+  try {
+    const entries = await readdir(dirPath, { withFileTypes: true });
+    const total = entries.length;
+
+    for (let i = 0; i < entries.length; i++) {
+      const entry = entries[i];
+      onProgress?.(i + 1, total, entry.name);
+
+      try {
+        await rm(join(dirPath, entry.name), { recursive: true, force: true });
+        success++;
+      } catch {
+        failed++;
+      }
+    }
+  } catch {
+    return { success: 0, failed: 0 };
+  }
+
+  return { success, failed };
+}

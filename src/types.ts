@@ -67,6 +67,8 @@ export interface ScannerOptions {
   verbose?: boolean;
   daysOld?: number;
   minSize?: number;
+  searchPaths?: string[];
+  maxDepth?: number;
 }
 
 export interface Scanner {
@@ -192,4 +194,3 @@ export const CATEGORIES: Record<CategoryId, Category> = {
     safetyNote: 'Review carefully - keeps newest copy by default',
   },
 };
-

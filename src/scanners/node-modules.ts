@@ -16,6 +16,7 @@ const DEFAULT_SEARCH_PATHS = [
 ];
 
 const DEFAULT_DAYS_OLD = 30;
+const DEFAULT_MAX_DEPTH = 4;
 
 export class NodeModulesScanner extends BaseScanner {
   category = CATEGORIES['node-modules'];
@@ -23,10 +24,12 @@ export class NodeModulesScanner extends BaseScanner {
   async scan(options?: ScannerOptions): Promise<ScanResult> {
     const items: CleanableItem[] = [];
     const daysOld = options?.daysOld ?? DEFAULT_DAYS_OLD;
+    const maxDepth = options?.maxDepth ?? DEFAULT_MAX_DEPTH;
+    const searchPaths = options?.searchPaths ?? DEFAULT_SEARCH_PATHS;
 
-    for (const searchPath of DEFAULT_SEARCH_PATHS) {
+    for (const searchPath of searchPaths) {
       if (await exists(searchPath)) {
-        const found = await this.findNodeModules(searchPath, daysOld, 4);
+        const found = await this.findNodeModules(searchPath, daysOld, maxDepth);
         items.push(...found);
       }
     }
@@ -106,4 +109,3 @@ export class NodeModulesScanner extends BaseScanner {
     return parts[parts.length - 1] || projectPath;
   }
 }
-

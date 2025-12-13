@@ -2,15 +2,15 @@ import chalk from 'chalk';
 import confirm from '@inquirer/confirm';
 import checkbox from '@inquirer/checkbox';
 import type { CategoryId, CleanSummary, CleanableItem, ScanResult, SafetyLevel } from '../types.js';
-import { runAllScans, getScanner, getAllScanners } from '../scanners/index.js';
-import { formatSize, createScanProgress, createCleanProgress } from '../utils/index.js';
+import { runAllScans, runScans, getScanner, getAllScanners } from '../scanners/index.js';
+import { createCleanProgress, createScanProgress, expandPath, formatSize, loadConfig } from '../utils/index.js';
 
 interface CleanCommandOptions {
   all?: boolean;
   yes?: boolean;
   dryRun?: boolean;
   category?: CategoryId;
-  unsafe?: boolean;
+  includeRisky?: boolean;
   noProgress?: boolean;
 }
 
@@ -29,17 +29,34 @@ interface CategoryChoice {
 }
 
 export async function cleanCommand(options: CleanCommandOptions): Promise<CleanSummary | null> {
+  const config = await loadConfig();
   const showProgress = !options.noProgress && process.stdout.isTTY;
-  const scanners = getAllScanners();
+  const scanners = options.category ? [options.category] : getAllScanners().map((s) => s.category.id);
   const scanProgress = showProgress ? createScanProgress(scanners.length) : null;
 
-  const summary = await runAllScans({
-    parallel: true,
-    concurrency: 4,
-    onProgress: (completed, _total, scanner) => {
+  const scanOptions = {
+    parallel: config.parallelScans ?? true,
+    concurrency: config.concurrency ?? 4,
+    optionsForScanner: (scanner: { category: { id: CategoryId } }) => {
+      if (scanner.category.id === 'downloads' && typeof config.downloadsDaysOld === 'number') {
+        return { daysOld: config.downloadsDaysOld };
+      }
+      if (scanner.category.id === 'large-files' && typeof config.largeFilesMinSize === 'number') {
+        return { minSize: config.largeFilesMinSize };
+      }
+      if (scanner.category.id === 'node-modules' && config.extraPaths?.nodeModules?.length) {
+        return { searchPaths: config.extraPaths.nodeModules.map(expandPath) };
+      }
+      return undefined;
+    },
+    onProgress: (completed: number, _total: number, scanner: { category: { name: string } }) => {
       scanProgress?.update(completed, `Scanning ${scanner.category.name}...`);
     },
-  });
+  };
+
+  const summary = options.category
+    ? await runScans([options.category], scanOptions)
+    : await runAllScans(scanOptions);
 
   scanProgress?.finish();
 
@@ -48,15 +65,18 @@ export async function cleanCommand(options: CleanCommandOptions): Promise<CleanS
     return null;
   }
 
-  let resultsWithItems = summary.results.filter((r) => r.items.length > 0);
+  const excluded = new Set(config.excludeCategories ?? []);
+  let resultsWithItems = summary.results
+    .filter((r) => r.items.length > 0)
+    .filter((r) => !excluded.has(r.category.id));
 
   const riskyResults = resultsWithItems.filter((r) => r.category.safetyLevel === 'risky');
   const safeResults = resultsWithItems.filter((r) => r.category.safetyLevel !== 'risky');
 
-  if (!options.unsafe && riskyResults.length > 0) {
+  if (!options.includeRisky && riskyResults.length > 0) {
     const riskySize = riskyResults.reduce((sum, r) => sum + r.totalSize, 0);
     console.log();
-    console.log(chalk.yellow('⚠ Skipping risky categories (use --unsafe to include):'));
+    console.log(chalk.yellow('⚠ Skipping risky categories (use --risky to include):'));
     for (const result of riskyResults) {
       console.log(chalk.dim(`  ${SAFETY_ICONS.risky} ${result.category.name}: ${formatSize(result.totalSize)}`));
       if (result.category.safetyNote) {
@@ -80,7 +100,8 @@ export async function cleanCommand(options: CleanCommandOptions): Promise<CleanS
       items: r.items,
     }));
   } else {
-    selectedItems = await selectItemsInteractively(resultsWithItems, options.unsafe);
+    const defaultSelected = config.defaultCategories?.length ? new Set(config.defaultCategories) : undefined;
+    selectedItems = await selectItemsInteractively(resultsWithItems, defaultSelected);
   }
 
   if (selectedItems.length === 0) {
@@ -145,7 +166,7 @@ export async function cleanCommand(options: CleanCommandOptions): Promise<CleanS
 
 async function selectItemsInteractively(
   results: ScanResult[],
-  _unsafe = false
+  defaultSelected?: Set<CategoryId>
 ): Promise<{ categoryId: CategoryId; items: CleanableItem[] }[]> {
   console.log();
   console.log(chalk.bold('Select categories to clean:'));
@@ -158,7 +179,7 @@ async function selectItemsInteractively(
     return {
       name: `${safetyIcon} ${r.category.name.padEnd(28)} ${chalk.yellow(formatSize(r.totalSize).padStart(10))} ${chalk.dim(`(${r.items.length} items)`)}`,
       value: r.category.id,
-      checked: !isRisky && r.category.safetyLevel !== 'risky',
+      checked: defaultSelected ? defaultSelected.has(r.category.id) : !isRisky,
       size: r.totalSize,
       items: r.items,
     };
@@ -243,4 +264,3 @@ function printCleanResults(summary: CleanSummary): void {
 
   console.log();
 }
-

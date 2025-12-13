@@ -109,10 +109,10 @@ export async function uninstallCommand(options: UninstallCommandOptions): Promis
       freedSpace += app.size;
 
       for (const relatedPath of app.relatedPaths) {
+        const relatedSize = await getSize(relatedPath).catch(() => 0);
         try {
           await rm(relatedPath, { recursive: true, force: true });
-          const size = await getSize(relatedPath).catch(() => 0);
-          freedSpace += size;
+          freedSpace += relatedSize;
         } catch {
           // Ignore errors for related paths
         }
@@ -223,4 +223,3 @@ async function findRelatedPaths(appName: string): Promise<string[]> {
 
   return paths;
 }
-

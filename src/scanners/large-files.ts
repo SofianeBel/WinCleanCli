@@ -11,11 +11,12 @@ export class LargeFilesScanner extends BaseScanner {
     const minSize = options?.minSize ?? SIZE_THRESHOLDS.LARGE_FILE;
     const items: CleanableItem[] = [];
 
-    const searchPaths = [PATHS.downloads, PATHS.documents];
+    const searchPaths = options?.searchPaths ?? [PATHS.downloads, PATHS.documents];
+    const maxDepth = options?.maxDepth ?? 3;
 
     for (const searchPath of searchPaths) {
       if (await exists(searchPath)) {
-        const found = await this.findLargeFiles(searchPath, minSize, 3);
+        const found = await this.findLargeFiles(searchPath, minSize, maxDepth);
         items.push(...found);
       }
     }
@@ -70,4 +71,3 @@ export class LargeFilesScanner extends BaseScanner {
     return items;
   }
 }
-

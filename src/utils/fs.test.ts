@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtemp, writeFile, mkdir, rm } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { exists, getSize, getDirectorySize, getItems, getDirectoryItems } from './fs.js';
+import { exists, getSize, getDirectorySize, getItems, getDirectoryItems, emptyDirectory } from './fs.js';
 
 describe('fs utils', () => {
   let testDir: string;
@@ -135,5 +135,28 @@ describe('fs utils', () => {
       expect(items[0].name).toBe('large.txt');
     });
   });
-});
 
+  describe('emptyDirectory', () => {
+    it('should remove all entries but keep the directory', async () => {
+      const subDir = join(testDir, 'subdir');
+      await mkdir(subDir);
+      await writeFile(join(testDir, 'file.txt'), 'content');
+      await writeFile(join(subDir, 'nested.txt'), 'nested');
+
+      const result = await emptyDirectory(testDir);
+
+      expect(result.failed).toBe(0);
+      expect(await exists(testDir)).toBe(true);
+      expect(await getDirectoryItems(testDir)).toEqual([]);
+    });
+
+    it('should not remove anything in dry-run mode', async () => {
+      await writeFile(join(testDir, 'file.txt'), 'content');
+
+      const result = await emptyDirectory(testDir, true);
+
+      expect(result.success).toBe(1);
+      expect(await getDirectoryItems(testDir)).toHaveLength(1);
+    });
+  });
+});

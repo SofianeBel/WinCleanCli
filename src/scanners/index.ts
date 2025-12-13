@@ -44,6 +44,7 @@ export function getAllScanners(): Scanner[] {
 export interface ParallelScanOptions extends ScannerOptions {
   parallel?: boolean;
   concurrency?: number;
+  optionsForScanner?: (scanner: Scanner) => ScannerOptions | undefined;
   onProgress?: (completed: number, total: number, scanner: Scanner, result: ScanResult) => void;
 }
 
@@ -83,7 +84,8 @@ export async function runAllScans(
 
   if (parallel) {
     const tasks = scanners.map((scanner) => async () => {
-      const result = await scanner.scan(options);
+      const scanOptions = options?.optionsForScanner?.(scanner) ?? options;
+      const result = await scanner.scan(scanOptions);
       completed++;
       options?.onProgress?.(completed, total, scanner, result);
       onProgress?.(scanner, result);
@@ -101,7 +103,8 @@ export async function runAllScans(
     const results: ScanResult[] = [];
 
     for (const scanner of scanners) {
-      const result = await scanner.scan(options);
+      const scanOptions = options?.optionsForScanner?.(scanner) ?? options;
+      const result = await scanner.scan(scanOptions);
       results.push(result);
       completed++;
       options?.onProgress?.(completed, total, scanner, result);
@@ -129,7 +132,8 @@ export async function runScans(
 
   if (parallel) {
     const tasks = scanners.map((scanner) => async () => {
-      const result = await scanner.scan(options);
+      const scanOptions = options?.optionsForScanner?.(scanner) ?? options;
+      const result = await scanner.scan(scanOptions);
       completed++;
       options?.onProgress?.(completed, total, scanner, result);
       onProgress?.(scanner, result);
@@ -147,7 +151,8 @@ export async function runScans(
     const results: ScanResult[] = [];
 
     for (const scanner of scanners) {
-      const result = await scanner.scan(options);
+      const scanOptions = options?.optionsForScanner?.(scanner) ?? options;
+      const result = await scanner.scan(scanOptions);
       results.push(result);
       completed++;
       options?.onProgress?.(completed, total, scanner, result);
@@ -178,4 +183,3 @@ export {
   NodeModulesScanner,
   DuplicatesScanner,
 };
-
