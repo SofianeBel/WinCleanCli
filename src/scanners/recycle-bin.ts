@@ -9,13 +9,37 @@ const POWERSHELL = 'powershell.exe -NoProfile -NonInteractive -ExecutionPolicy B
 export class RecycleBinScanner extends BaseScanner {
   category = CATEGORIES['recycle-bin'];
 
+  /**
+   * Check if PowerShell is available and can execute commands.
+   */
+  private async isPowerShellAvailable(): Promise<boolean> {
+    try {
+      const { stdout } = await execAsync(`${POWERSHELL} -Command "$PSVersionTable.PSVersion.Major"`, {
+        shell: 'cmd.exe',
+        timeout: 5000,
+      });
+      return stdout.trim().length > 0;
+    } catch {
+      return false;
+    }
+  }
+
   async scan(_options?: ScannerOptions): Promise<ScanResult> {
     const items: CleanableItem[] = [];
+
+    // Check PowerShell availability first
+    const psAvailable = await this.isPowerShellAvailable();
+    if (!psAvailable) {
+      return {
+        ...this.createResult(items),
+        error: 'PowerShell not available. Recycle Bin scanning requires PowerShell. Check ExecutionPolicy or run as administrator.',
+      };
+    }
 
     try {
       const { stdout } = await execAsync(
         `${POWERSHELL} -Command "(New-Object -ComObject Shell.Application).NameSpace(10).Items() | ForEach-Object { $_.Size }"`,
-        { shell: 'cmd.exe' }
+        { shell: 'cmd.exe', timeout: 30000 }
       );
 
       const sizes = stdout.trim().split('\n').filter(Boolean);
@@ -36,8 +60,12 @@ export class RecycleBinScanner extends BaseScanner {
           isDirectory: true,
         });
       }
-    } catch {
-      // Recycle bin may be empty or inaccessible
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return {
+        ...this.createResult(items),
+        error: `Recycle bin scan failed: ${errorMessage}`,
+      };
     }
 
     return this.createResult(items);

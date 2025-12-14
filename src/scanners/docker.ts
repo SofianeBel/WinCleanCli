@@ -36,18 +36,27 @@ export class DockerScanner extends BaseScanner {
   }
 
   private parseDockerSize(sizeStr: string): number {
-    const match = sizeStr.match(/([\d.]+)\s*(B|KB|MB|GB|TB|kB)/i);
+    // Docker uses SI units (kB = 1000 bytes) vs binary units (KB/KiB = 1024 bytes)
+    const match = sizeStr.match(/([\d.]+)\s*(B|kB|KB|MB|GB|TB)/i);
     if (!match) return 0;
 
     const value = parseFloat(match[1]);
-    const unit = match[2].toUpperCase();
+    const unit = match[2];
 
+    // Docker uses SI prefixes: kB = 1000, MB = 1000^2, etc.
+    // We normalize to bytes using SI multipliers for Docker output
     const multipliers: Record<string, number> = {
       B: 1,
-      KB: 1024,
-      MB: 1024 * 1024,
-      GB: 1024 * 1024 * 1024,
-      TB: 1024 * 1024 * 1024 * 1024,
+      b: 1,
+      kB: 1000, // SI kilobyte (Docker default)
+      KB: 1024, // Binary kilobyte
+      kb: 1000,
+      MB: 1000 * 1000,
+      mb: 1000 * 1000,
+      GB: 1000 * 1000 * 1000,
+      gb: 1000 * 1000 * 1000,
+      TB: 1000 * 1000 * 1000 * 1000,
+      tb: 1000 * 1000 * 1000 * 1000,
     };
 
     return value * (multipliers[unit] || 1);

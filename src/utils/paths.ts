@@ -1,5 +1,5 @@
 import { homedir } from 'os';
-import { join } from 'path';
+import { join, normalize, resolve } from 'path';
 
 export const HOME = homedir();
 
@@ -46,19 +46,72 @@ export const PATHS = {
   programFilesX86: process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)',
 };
 
-export function expandPath(path: string): string {
-  if (path.startsWith('~')) {
-    return path.replace('~', HOME);
+/**
+ * Expand a path that may start with ~ to use the home directory.
+ * Validates that the resulting path is safe and not a system path.
+ * @param inputPath - Path to expand
+ * @returns Normalized absolute path
+ * @throws Error if path traversal is detected or path is unsafe
+ */
+export function expandPath(inputPath: string): string {
+  let expanded = inputPath;
+  if (inputPath.startsWith('~')) {
+    expanded = inputPath.replace('~', HOME);
   }
-  return path;
+
+  const normalized = normalize(resolve(expanded));
+
+  // Validate that the resolved path is safe
+  if (isSystemPath(normalized)) {
+    throw new Error(`Unsafe path detected: ${inputPath} resolves to protected system path`);
+  }
+
+  return normalized;
 }
 
-export function isSystemPath(path: string): boolean {
+/**
+ * Check if a path is a protected system path that should never be modified.
+ * @param targetPath - Path to check
+ * @returns true if the path is a system path
+ */
+export function isSystemPath(targetPath: string): boolean {
+  const normalized = normalize(targetPath).toLowerCase();
+
   const systemPaths = [
-    'C:\\Windows\\System32',
-    'C:\\Windows\\SysWOW64',
-    'C:\\Windows\\WinSxS',
-    'C:\\Program Files\\WindowsApps',
+    'c:\\windows',
+    'c:\\program files',
+    'c:\\program files (x86)',
+    'c:\\programdata',
+    'c:\\$recycle.bin',
+    'c:\\system volume information',
+    'c:\\recovery',
+    'c:\\boot',
   ];
-  return systemPaths.some((p) => path.toLowerCase().startsWith(p.toLowerCase()));
+
+  return systemPaths.some((p) => normalized.startsWith(p));
+}
+
+/**
+ * Check if a path is within safe user directories.
+ * @param targetPath - Path to check
+ * @returns true if the path is within a safe directory
+ */
+export function isSafePath(targetPath: string): boolean {
+  const safePaths = [
+    HOME,
+    process.env.TEMP || '',
+    process.env.TMP || '',
+    process.env.LOCALAPPDATA || '',
+    process.env.APPDATA || '',
+  ].filter(Boolean);
+
+  const normalized = normalize(targetPath).toLowerCase();
+
+  // Block system paths first
+  if (isSystemPath(normalized)) {
+    return false;
+  }
+
+  // Check if within safe directories
+  return safePaths.some((safe) => normalized.startsWith(normalize(safe).toLowerCase()));
 }
