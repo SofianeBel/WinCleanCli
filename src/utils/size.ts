@@ -27,3 +27,33 @@ export const SIZE_THRESHOLDS = {
   SMALL_FILE: 10 * 1024 * 1024,
 } as const;
 
+export interface DiskSpaceInfo {
+  drive: string;
+  total: number;
+  free: number;
+  used: number;
+}
+
+export async function getDiskSpace(drive = 'C:'): Promise<DiskSpaceInfo | null> {
+  try {
+    const { exec } = await import('child_process');
+    const { promisify } = await import('util');
+    const execAsync = promisify(exec);
+
+    // Use PowerShell to get disk space info
+    const { stdout } = await execAsync(
+      `powershell -Command "Get-PSDrive ${drive.replace(':', '')} | Select-Object Used,Free | ConvertTo-Json"`,
+      { timeout: 5000 }
+    );
+
+    const data = JSON.parse(stdout.trim());
+    const used = data.Used ?? 0;
+    const free = data.Free ?? 0;
+    const total = used + free;
+
+    return { drive, total, free, used };
+  } catch {
+    return null;
+  }
+}
+

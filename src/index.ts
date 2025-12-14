@@ -3,7 +3,7 @@
 import { Command } from 'commander';
 import { ExitPromptError } from '@inquirer/core';
 import { readFileSync } from 'fs';
-import { cleanCommand, interactiveCommand, listCategories, maintenanceCommand, scanCommand, uninstallCommand } from './commands/index.js';
+import { cleanCommand, interactiveCommand, listCategories, maintenanceCommand, profileCommand, scanCommand, uninstallCommand } from './commands/index.js';
 import { initConfig, configExists, loadConfig } from './utils/index.js';
 import { CATEGORIES, type CategoryId } from './types.js';
 
@@ -50,12 +50,16 @@ program
   .option('-c, --category <id>', 'Scan a single category', parseCategoryId)
   .option('-v, --verbose', 'Show top items per category')
   .option('--no-progress', 'Disable progress bar')
+  .option('--json', 'Output results as JSON for scripting')
+  .option('--report <file>', 'Export report to file (supports .html, .md)')
   .action(async (options) => {
     await scanCommand({
       category: options.category,
       includeRisky: options.risky,
       verbose: options.verbose,
       noProgress: !options.progress,
+      json: options.json,
+      report: options.report,
     });
   });
 
@@ -67,7 +71,10 @@ program
   .option('-y, --yes', 'Skip confirmation prompts')
   .option('-d, --dry-run', 'Show what would be removed without actually removing')
   .option('-c, --category <id>', 'Clean a single category', parseCategoryId)
+  .option('-p, --profile <name>', 'Use a cleaning profile (quick, developer, full)')
   .option('--no-progress', 'Disable progress bar')
+  .option('--json', 'Output results as JSON for scripting')
+  .option('--report <file>', 'Export report to file (supports .html, .md)')
   .action(async (options) => {
     try {
       await cleanCommand({
@@ -76,7 +83,10 @@ program
         yes: options.yes,
         dryRun: options.dryRun,
         category: options.category,
+        profile: options.profile,
         noProgress: !options.progress,
+        json: options.json,
+        report: options.report,
       });
     } catch (error) {
       if (error instanceof ExitPromptError) return;
@@ -124,6 +134,27 @@ program
   .description('List all available categories')
   .action(() => {
     listCategories();
+  });
+
+program
+  .command('profile')
+  .description('Manage cleaning profiles')
+  .option('-l, --list', 'List all available profiles')
+  .option('-s, --show <name>', 'Show details of a specific profile')
+  .option('-c, --create', 'Create a new custom profile')
+  .option('-d, --delete <name>', 'Delete a custom profile')
+  .action(async (options) => {
+    try {
+      await profileCommand({
+        list: options.list,
+        show: options.show,
+        create: options.create,
+        delete: options.delete,
+      });
+    } catch (error) {
+      if (error instanceof ExitPromptError) return;
+      throw error;
+    }
   });
 
 program

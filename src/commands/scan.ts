@@ -1,8 +1,19 @@
 import chalk from 'chalk';
-import type { CategoryId, CategoryGroup, ScanSummary, ScanResult, SafetyLevel } from '../types.js';
+import { readFileSync } from 'fs';
+import type { CategoryId, CategoryGroup, ScanSummary, ScanResult, SafetyLevel, JsonScanOutput } from '../types.js';
 import { CATEGORIES } from '../types.js';
 import { runAllScans, runScans, getAllScanners } from '../scanners/index.js';
-import { createScanProgress, expandPath, formatSize, loadConfig } from '../utils/index.js';
+import { createScanProgress, expandPath, formatSize, generateReport, loadConfig } from '../utils/index.js';
+
+function getPackageVersion(): string {
+  try {
+    const raw = readFileSync(new URL('../../package.json', import.meta.url), 'utf8');
+    const pkg = JSON.parse(raw) as { version?: string };
+    return pkg.version ?? '0.0.0';
+  } catch {
+    return '0.0.0';
+  }
+}
 
 const SAFETY_ICONS: Record<SafetyLevel, string> = {
   safe: chalk.green('●'),
@@ -15,13 +26,15 @@ interface ScanCommandOptions {
   includeRisky?: boolean;
   verbose?: boolean;
   noProgress?: boolean;
+  json?: boolean;
+  report?: string;
 }
 
 export async function scanCommand(options: ScanCommandOptions): Promise<ScanSummary> {
   const config = await loadConfig();
   const scanners = options.category ? [options.category] : getAllScanners().map((s) => s.category.id);
   const total = scanners.length;
-  const showProgress = !options.noProgress && process.stdout.isTTY;
+  const showProgress = !options.noProgress && !options.json && process.stdout.isTTY;
 
   const progress = showProgress ? createScanProgress(total) : null;
 
@@ -77,9 +90,55 @@ export async function scanCommand(options: ScanCommandOptions): Promise<ScanSumm
     totalItems: results.reduce((sum, r) => sum + r.items.length, 0),
   };
 
-  printScanResults(filteredSummary, options.verbose);
+  if (options.json) {
+    printJsonResults(filteredSummary);
+  } else {
+    printScanResults(filteredSummary, options.verbose);
+  }
+
+  // Generate report if requested
+  if (options.report) {
+    await generateReport(options.report, {
+      type: 'scan',
+      timestamp: new Date().toISOString(),
+      summary: filteredSummary,
+    });
+    if (!options.json) {
+      console.log(chalk.green(`Report saved to: ${options.report}`));
+    }
+  }
 
   return filteredSummary;
+}
+
+function printJsonResults(summary: ScanSummary): void {
+  const output: JsonScanOutput = {
+    timestamp: new Date().toISOString(),
+    version: getPackageVersion(),
+    results: summary.results.map((r) => ({
+      category: {
+        id: r.category.id,
+        name: r.category.name,
+        group: r.category.group,
+        safetyLevel: r.category.safetyLevel,
+      },
+      items: r.items.map((i) => ({
+        path: i.path,
+        size: i.size,
+        name: i.name,
+        isDirectory: i.isDirectory,
+      })),
+      totalSize: r.totalSize,
+      error: r.error,
+    })),
+    summary: {
+      totalSize: summary.totalSize,
+      totalItems: summary.totalItems,
+      categoriesScanned: summary.results.length,
+    },
+  };
+
+  console.log(JSON.stringify(output, null, 2));
 }
 
 function printScanResults(summary: ScanSummary, verbose = false): void {

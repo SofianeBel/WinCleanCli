@@ -71,6 +71,67 @@ export interface ScannerOptions {
   maxDepth?: number;
 }
 
+// Cleaning profiles for quick access to common cleaning scenarios
+export interface CleaningProfile {
+  id: string;
+  name: string;
+  description: string;
+  categories: CategoryId[];
+  options?: {
+    downloadsDaysOld?: number;
+    largeFilesMinSize?: number;
+    includeRisky?: boolean;
+  };
+}
+
+// JSON output types for automation/scripting
+export interface JsonScanOutput {
+  timestamp: string;
+  version: string;
+  results: Array<{
+    category: {
+      id: CategoryId;
+      name: string;
+      group: CategoryGroup;
+      safetyLevel: SafetyLevel;
+    };
+    items: Array<{
+      path: string;
+      size: number;
+      name: string;
+      isDirectory: boolean;
+    }>;
+    totalSize: number;
+    error?: string;
+  }>;
+  summary: {
+    totalSize: number;
+    totalItems: number;
+    categoriesScanned: number;
+  };
+}
+
+export interface JsonCleanOutput {
+  timestamp: string;
+  version: string;
+  dryRun: boolean;
+  results: Array<{
+    category: {
+      id: CategoryId;
+      name: string;
+    };
+    cleanedItems: number;
+    freedSpace: number;
+    errors: string[];
+  }>;
+  summary: {
+    freedSpace: number;
+    cleanedItems: number;
+    errors: number;
+    duration: number;
+  };
+}
+
 export interface Scanner {
   category: Category;
   scan(options?: ScannerOptions): Promise<ScanResult>;
