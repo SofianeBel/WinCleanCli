@@ -74,17 +74,24 @@ Summary:
 
 ? Proceed with cleaning? (Y/n)
 
-✓ Cleaning Complete!
-──────────────────────────────────────────────────────
-  Recycle Bin                      ✓ 2.1 GB freed
-  Browser Cache                    ✓ 1.5 GB freed
-  Temporary Files                  ✓ 549.2 MB freed
-  User Cache Files                 ✓ 12.5 GB freed
-  Development Cache                ✓ 15.9 GB freed
+✨ Cleaning Complete!
+───────────────────────────────────────────────────────────
 
-──────────────────────────────────────────────────────
-🎉 Freed 32.5 GB of disk space!
-   Cleaned 803 items
+   Space freed:        32.5 GB
+   Items cleaned:      803
+   Duration:           23s
+   Success rate:       100.0%
+
+   Disk space:         45.8 GB → 78.3 GB available
+
+───────────────────────────────────────────────────────────
+
+Breakdown by category:
+  Recycle Bin                        2.1 GB
+  Browser Cache                      1.5 GB
+  Temporary Files                  549.2 MB
+  User Cache Files                  12.5 GB
+  Development Cache                 15.9 GB
 ```
 
 ## ✨ Features
@@ -95,6 +102,9 @@ Summary:
 | 🎯 **Interactive** | Select exactly what you want to clean with checkboxes |
 | 🛡️ **Safe by Default** | Risky items hidden unless you use `--risky` |
 | 🔍 **Smart Scanning** | Finds caches, logs, dev files, browser data, and more |
+| 📋 **Cleaning Profiles** | Use built-in profiles (quick, developer, full) or create custom ones |
+| 📊 **JSON Output** | Automation-friendly output with `--json` flag |
+| 📄 **Export Reports** | Generate HTML or Markdown reports with `--report` |
 | 📱 **App Remover** | Remove apps and their associated files |
 | 🔧 **Maintenance** | Flush DNS cache, run Disk Cleanup, clear caches |
 | 🔒 **Privacy First** | 100% offline — no data ever leaves your machine |
@@ -166,6 +176,53 @@ npx windows-cleaner-cli maintenance --thumbnails
 
 # Clear font cache (requires admin)
 npx windows-cleaner-cli maintenance --fonts
+```
+
+### Cleaning Profiles
+
+Use built-in profiles for quick cleanup or create your own:
+
+```bash
+# Use a built-in profile
+npx windows-cleaner-cli clean --profile quick      # Browser cache, temp, recycle bin
+npx windows-cleaner-cli clean --profile developer  # Dev caches, node_modules, Docker
+npx windows-cleaner-cli clean --profile full       # All safe and moderate categories
+
+# Manage profiles
+npx windows-cleaner-cli profile --list             # List all profiles
+npx windows-cleaner-cli profile --show developer   # Show profile details
+npx windows-cleaner-cli profile --create           # Create a custom profile
+npx windows-cleaner-cli profile --delete myprofile # Delete a custom profile
+```
+
+### Automation & Scripting
+
+Use JSON output for scripting and automation:
+
+```bash
+# Get scan results as JSON
+npx windows-cleaner-cli scan --json
+
+# Clean with JSON output (non-interactive)
+npx windows-cleaner-cli clean --profile quick --yes --json
+
+# Pipe to jq for processing
+npx windows-cleaner-cli scan --json | jq '.summary.totalSize'
+```
+
+### Export Reports
+
+Generate detailed reports in HTML or Markdown:
+
+```bash
+# Generate HTML report after scanning
+npx windows-cleaner-cli scan --report scan-report.html
+
+# Generate Markdown report after cleaning
+npx windows-cleaner-cli clean --all --yes --report cleanup-2024.md
+
+# Combine with profiles for automated reports
+npx windows-cleaner-cli clean --profile full --yes --report monthly-cleanup.html
 ```
 
 ### Other Commands
