@@ -1,8 +1,15 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtemp, writeFile, mkdir, rm } from 'fs/promises';
+import { mkdtemp, writeFile, mkdir, rm, stat } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { exists, getSize, getDirectorySize, getItems, getDirectoryItems, emptyDirectory } from './fs.js';
+
+// Helper to ensure file is written and accessible before testing
+async function writeAndWait(path: string, content: string): Promise<void> {
+  await writeFile(path, content);
+  // Give Windows filesystem a moment to finalize the write
+  await stat(path);
+}
 
 describe('fs utils', () => {
   let testDir: string;
@@ -18,13 +25,14 @@ describe('fs utils', () => {
   describe('exists', () => {
     it('should return true for existing file', async () => {
       const filePath = join(testDir, 'test.txt');
-      await writeFile(filePath, 'test content');
+      await writeAndWait(filePath, 'test content');
       expect(await exists(filePath)).toBe(true);
     });
 
     it('should return true for existing directory', async () => {
       const dirPath = join(testDir, 'subdir');
       await mkdir(dirPath);
+      await stat(dirPath); // Wait for directory to be accessible
       expect(await exists(dirPath)).toBe(true);
     });
 
@@ -37,7 +45,7 @@ describe('fs utils', () => {
     it('should return file size', async () => {
       const filePath = join(testDir, 'test.txt');
       const content = 'test content';
-      await writeFile(filePath, content);
+      await writeAndWait(filePath, content);
       expect(await getSize(filePath)).toBe(content.length);
     });
 
@@ -50,8 +58,8 @@ describe('fs utils', () => {
     it('should return total size of directory contents', async () => {
       const content1 = 'content1';
       const content2 = 'content2';
-      await writeFile(join(testDir, 'file1.txt'), content1);
-      await writeFile(join(testDir, 'file2.txt'), content2);
+      await writeAndWait(join(testDir, 'file1.txt'), content1);
+      await writeAndWait(join(testDir, 'file2.txt'), content2);
 
       const size = await getDirectorySize(testDir);
       expect(size).toBe(content1.length + content2.length);
@@ -63,8 +71,8 @@ describe('fs utils', () => {
 
       const content1 = 'content1';
       const content2 = 'subcontent';
-      await writeFile(join(testDir, 'file1.txt'), content1);
-      await writeFile(join(subDir, 'file2.txt'), content2);
+      await writeAndWait(join(testDir, 'file1.txt'), content1);
+      await writeAndWait(join(subDir, 'file2.txt'), content2);
 
       const size = await getDirectorySize(testDir);
       expect(size).toBe(content1.length + content2.length);
@@ -77,8 +85,8 @@ describe('fs utils', () => {
 
   describe('getDirectoryItems', () => {
     it('should list items in directory', async () => {
-      await writeFile(join(testDir, 'file1.txt'), 'content1');
-      await writeFile(join(testDir, 'file2.txt'), 'content2');
+      await writeAndWait(join(testDir, 'file1.txt'), 'content1');
+      await writeAndWait(join(testDir, 'file2.txt'), 'content2');
 
       const items = await getDirectoryItems(testDir);
 
@@ -88,7 +96,7 @@ describe('fs utils', () => {
 
     it('should include size for each item', async () => {
       const content = 'test content';
-      await writeFile(join(testDir, 'file.txt'), content);
+      await writeAndWait(join(testDir, 'file.txt'), content);
 
       const items = await getDirectoryItems(testDir);
 
@@ -97,7 +105,7 @@ describe('fs utils', () => {
 
     it('should identify directories', async () => {
       await mkdir(join(testDir, 'subdir'));
-      await writeFile(join(testDir, 'file.txt'), 'content');
+      await writeAndWait(join(testDir, 'file.txt'), 'content');
 
       const items = await getDirectoryItems(testDir);
 
@@ -116,7 +124,7 @@ describe('fs utils', () => {
 
   describe('getItems', () => {
     it('should filter by minimum age', async () => {
-      await writeFile(join(testDir, 'file.txt'), 'content');
+      await writeAndWait(join(testDir, 'file.txt'), 'content');
 
       const itemsWithAge = await getItems(testDir, { minAge: 30 });
       expect(itemsWithAge).toHaveLength(0);
@@ -126,8 +134,8 @@ describe('fs utils', () => {
     });
 
     it('should filter by minimum size', async () => {
-      await writeFile(join(testDir, 'small.txt'), 'a');
-      await writeFile(join(testDir, 'large.txt'), 'a'.repeat(1000));
+      await writeAndWait(join(testDir, 'small.txt'), 'a');
+      await writeAndWait(join(testDir, 'large.txt'), 'a'.repeat(1000));
 
       const items = await getItems(testDir, { minSize: 500 });
 
@@ -140,8 +148,8 @@ describe('fs utils', () => {
     it('should remove all entries but keep the directory', async () => {
       const subDir = join(testDir, 'subdir');
       await mkdir(subDir);
-      await writeFile(join(testDir, 'file.txt'), 'content');
-      await writeFile(join(subDir, 'nested.txt'), 'nested');
+      await writeAndWait(join(testDir, 'file.txt'), 'content');
+      await writeAndWait(join(subDir, 'nested.txt'), 'nested');
 
       const result = await emptyDirectory(testDir);
 
@@ -151,7 +159,7 @@ describe('fs utils', () => {
     });
 
     it('should not remove anything in dry-run mode', async () => {
-      await writeFile(join(testDir, 'file.txt'), 'content');
+      await writeAndWait(join(testDir, 'file.txt'), 'content');
 
       const result = await emptyDirectory(testDir, true);
 

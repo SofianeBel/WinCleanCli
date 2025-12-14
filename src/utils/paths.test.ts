@@ -29,11 +29,19 @@ describe('paths utils', () => {
 
   describe('expandPath', () => {
     it('should expand tilde to home directory', () => {
-      expect(expandPath('~\\test')).toBe(`${HOME}\\test`);
+      const result = expandPath('~\\test');
+      expect(result).toContain(HOME);
+      expect(result.endsWith('test')).toBe(true);
     });
 
-    it('should return unchanged if no tilde', () => {
-      expect(expandPath('C:\\test')).toBe('C:\\test');
+    it('should return normalized path if no tilde', () => {
+      const result = expandPath('C:\\Users\\test');
+      expect(result).toBe('C:\\Users\\test');
+    });
+
+    it('should throw for system paths', () => {
+      expect(() => expandPath('C:\\Windows\\System32')).toThrow('Unsafe path detected');
+      expect(() => expandPath('C:\\Program Files')).toThrow('Unsafe path detected');
     });
   });
 

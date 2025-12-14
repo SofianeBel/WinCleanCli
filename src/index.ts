@@ -4,7 +4,7 @@ import { Command } from 'commander';
 import { ExitPromptError } from '@inquirer/core';
 import { readFileSync } from 'fs';
 import { cleanCommand, interactiveCommand, listCategories, maintenanceCommand, scanCommand, uninstallCommand } from './commands/index.js';
-import { initConfig, configExists, listBackups, cleanOldBackups, loadConfig, formatSize } from './utils/index.js';
+import { initConfig, configExists, loadConfig } from './utils/index.js';
 import { CATEGORIES, type CategoryId } from './types.js';
 
 const program = new Command();
@@ -155,35 +155,6 @@ program
     }
 
     console.log('Use --init to create config or --show to display current config.');
-  });
-
-program
-  .command('backup')
-  .description('Manage backups')
-  .option('--list', 'List all backups')
-  .option('--clean', 'Clean old backups (older than 7 days)')
-  .action(async (options) => {
-    if (options.list) {
-      const backups = await listBackups();
-      if (backups.length === 0) {
-        console.log('No backups found.');
-        return;
-      }
-      console.log('\nBackups:');
-      for (const backup of backups) {
-        console.log(`  ${backup.date.toLocaleDateString()} - ${formatSize(backup.size)}`);
-        console.log(`    ${backup.path}`);
-      }
-      return;
-    }
-
-    if (options.clean) {
-      const cleaned = await cleanOldBackups();
-      console.log(`Cleaned ${cleaned} old backups.`);
-      return;
-    }
-
-    console.log('Use --list to show backups or --clean to remove old ones.');
   });
 
 program.parse();

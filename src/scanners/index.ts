@@ -71,99 +71,91 @@ async function runWithConcurrency<T>(
   return results;
 }
 
-export async function runAllScans(
+/**
+ * Internal function to execute scanners with shared logic.
+ * Handles both parallel and sequential execution modes.
+ */
+async function executeScanners(
+  scanners: Scanner[],
   options?: ParallelScanOptions,
   onProgress?: (scanner: Scanner, result: ScanResult) => void
 ): Promise<ScanSummary> {
-  const scanners = getAllScanners();
   const parallel = options?.parallel ?? true;
   const concurrency = options?.concurrency ?? 4;
 
   let completed = 0;
   const total = scanners.length;
 
-  if (parallel) {
-    const tasks = scanners.map((scanner) => async () => {
+  const executeScanner = async (scanner: Scanner): Promise<{ scanner: Scanner; result: ScanResult }> => {
+    try {
       const scanOptions = options?.optionsForScanner?.(scanner) ?? options;
       const result = await scanner.scan(scanOptions);
       completed++;
       options?.onProgress?.(completed, total, scanner, result);
       onProgress?.(scanner, result);
       return { scanner, result };
-    });
-
-    const scanResults = await runWithConcurrency(tasks, concurrency);
-    const results = scanResults.map((r) => r.result);
-
-    const totalSize = results.reduce((sum, r) => sum + r.totalSize, 0);
-    const totalItems = results.reduce((sum, r) => sum + r.items.length, 0);
-
-    return { results, totalSize, totalItems };
-  } else {
-    const results: ScanResult[] = [];
-
-    for (const scanner of scanners) {
-      const scanOptions = options?.optionsForScanner?.(scanner) ?? options;
-      const result = await scanner.scan(scanOptions);
-      results.push(result);
+    } catch (error) {
+      // Log error but continue with other scanners
+      console.error(`Scanner ${scanner.category.id} failed:`, error);
+      const emptyResult: ScanResult = {
+        category: scanner.category,
+        items: [],
+        totalSize: 0,
+      };
       completed++;
-      options?.onProgress?.(completed, total, scanner, result);
-      onProgress?.(scanner, result);
+      options?.onProgress?.(completed, total, scanner, emptyResult);
+      onProgress?.(scanner, emptyResult);
+      return { scanner, result: emptyResult };
     }
+  };
 
-    const totalSize = results.reduce((sum, r) => sum + r.totalSize, 0);
-    const totalItems = results.reduce((sum, r) => sum + r.items.length, 0);
+  let scanResults: { scanner: Scanner; result: ScanResult }[];
 
-    return { results, totalSize, totalItems };
+  if (parallel) {
+    const tasks = scanners.map((scanner) => () => executeScanner(scanner));
+    scanResults = await runWithConcurrency(tasks, concurrency);
+  } else {
+    scanResults = [];
+    for (const scanner of scanners) {
+      scanResults.push(await executeScanner(scanner));
+    }
   }
+
+  const results = scanResults.map((r) => r.result);
+  const totalSize = results.reduce((sum, r) => sum + r.totalSize, 0);
+  const totalItems = results.reduce((sum, r) => sum + r.items.length, 0);
+
+  return { results, totalSize, totalItems };
 }
 
+/**
+ * Run all registered scanners.
+ * @param options - Scan options including concurrency and progress callback
+ * @param onProgress - Optional callback for progress updates
+ * @returns Summary of all scan results
+ */
+export async function runAllScans(
+  options?: ParallelScanOptions,
+  onProgress?: (scanner: Scanner, result: ScanResult) => void
+): Promise<ScanSummary> {
+  const scanners = getAllScanners();
+  return executeScanners(scanners, options, onProgress);
+}
+
+/**
+ * Run scanners for specific categories.
+ * @param categoryIds - List of category IDs to scan
+ * @param options - Scan options including concurrency and progress callback
+ * @param onProgress - Optional callback for progress updates
+ * @returns Summary of scan results
+ */
 export async function runScans(
   categoryIds: CategoryId[],
   options?: ParallelScanOptions,
   onProgress?: (scanner: Scanner, result: ScanResult) => void
 ): Promise<ScanSummary> {
   const scanners = categoryIds.map((id) => getScanner(id));
-  const parallel = options?.parallel ?? true;
-  const concurrency = options?.concurrency ?? 4;
-
-  let completed = 0;
-  const total = scanners.length;
-
-  if (parallel) {
-    const tasks = scanners.map((scanner) => async () => {
-      const scanOptions = options?.optionsForScanner?.(scanner) ?? options;
-      const result = await scanner.scan(scanOptions);
-      completed++;
-      options?.onProgress?.(completed, total, scanner, result);
-      onProgress?.(scanner, result);
-      return { scanner, result };
-    });
-
-    const scanResults = await runWithConcurrency(tasks, concurrency);
-    const results = scanResults.map((r) => r.result);
-
-    const totalSize = results.reduce((sum, r) => sum + r.totalSize, 0);
-    const totalItems = results.reduce((sum, r) => sum + r.items.length, 0);
-
-    return { results, totalSize, totalItems };
-  } else {
-    const results: ScanResult[] = [];
-
-    for (const scanner of scanners) {
-      const scanOptions = options?.optionsForScanner?.(scanner) ?? options;
-      const result = await scanner.scan(scanOptions);
-      results.push(result);
-      completed++;
-      options?.onProgress?.(completed, total, scanner, result);
-      onProgress?.(scanner, result);
-    }
-
-    const totalSize = results.reduce((sum, r) => sum + r.totalSize, 0);
-    const totalItems = results.reduce((sum, r) => sum + r.items.length, 0);
-
-    return { results, totalSize, totalItems };
-  }
+  return executeScanners(scanners, options, onProgress);
 }
 
 export {

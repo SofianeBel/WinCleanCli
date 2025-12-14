@@ -15,8 +15,6 @@ export interface Config {
   excludeCategories?: CategoryId[];
   downloadsDaysOld?: number;
   largeFilesMinSize?: number;
-  backupEnabled?: boolean;
-  backupRetentionDays?: number;
   parallelScans?: boolean;
   concurrency?: number;
   extraPaths?: {
@@ -28,8 +26,6 @@ export interface Config {
 const DEFAULT_CONFIG: Config = {
   downloadsDaysOld: 30,
   largeFilesMinSize: 500 * 1024 * 1024,
-  backupEnabled: false,
-  backupRetentionDays: 7,
   parallelScans: true,
   concurrency: 4,
 };
@@ -91,8 +87,6 @@ export async function initConfig(): Promise<string> {
   const defaultConfig: Config = {
     downloadsDaysOld: 30,
     largeFilesMinSize: 500 * 1024 * 1024,
-    backupEnabled: false,
-    backupRetentionDays: 7,
     parallelScans: true,
     concurrency: 4,
     extraPaths: {

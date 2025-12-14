@@ -1,6 +1,10 @@
-import { stat, readdir, rm, access } from 'fs/promises';
+import { stat, readdir, rm, access, opendir } from 'fs/promises';
 import { join } from 'path';
 import type { CleanableItem } from '../types.js';
+import { isSystemPath } from './paths.js';
+
+/** Maximum concurrent I/O operations for directory scanning */
+const MAX_CONCURRENT_IO = 20;
 
 export async function exists(path: string): Promise<boolean> {
   try {
@@ -26,30 +30,71 @@ export async function getSize(path: string): Promise<number> {
   }
 }
 
+/**
+ * Run tasks with limited concurrency.
+ */
+async function runWithConcurrencyLimit<T>(
+  tasks: (() => Promise<T>)[],
+  concurrency: number
+): Promise<T[]> {
+  const results: T[] = [];
+  const executing: Set<Promise<void>> = new Set();
+
+  for (const task of tasks) {
+    const p: Promise<void> = task().then((result) => {
+      results.push(result);
+      executing.delete(p);
+    });
+    executing.add(p);
+
+    if (executing.size >= concurrency) {
+      await Promise.race(executing);
+    }
+  }
+
+  await Promise.all(executing);
+  return results;
+}
+
+/**
+ * Calculate the total size of a directory and its contents.
+ * Uses parallel I/O for better performance on large directories.
+ * @param dirPath - Path to the directory
+ * @returns Total size in bytes
+ */
 export async function getDirectorySize(dirPath: string): Promise<number> {
-  let totalSize = 0;
-
   try {
-    const entries = await readdir(dirPath, { withFileTypes: true });
+    const dir = await opendir(dirPath, { bufferSize: 64 });
+    const tasks: (() => Promise<number>)[] = [];
 
-    for (const entry of entries) {
-      const fullPath = join(dirPath, entry.name);
-      try {
-        if (entry.isFile()) {
-          const stats = await stat(fullPath);
-          totalSize += stats.size;
-        } else if (entry.isDirectory()) {
-          totalSize += await getDirectorySize(fullPath);
-        }
-      } catch {
-        continue;
+    for await (const dirent of dir) {
+      const fullPath = join(dirPath, dirent.name);
+
+      if (dirent.isFile()) {
+        tasks.push(async () => {
+          try {
+            const stats = await stat(fullPath);
+            return stats.size;
+          } catch {
+            return 0;
+          }
+        });
+      } else if (dirent.isDirectory()) {
+        tasks.push(async () => {
+          try {
+            return await getDirectorySize(fullPath);
+          } catch {
+            return 0;
+          }
+        });
       }
     }
+
+    const sizes = await runWithConcurrencyLimit(tasks, MAX_CONCURRENT_IO);
+    return sizes.reduce((sum, size) => sum + size, 0);
   } catch {
     return 0;
   }
-
-  return totalSize;
 }
 
 export async function getItems(
@@ -140,7 +185,19 @@ export async function getDirectoryItems(dirPath: string): Promise<CleanableItem[
   return items;
 }
 
+/**
+ * Remove a file or directory safely.
+ * @param path - Path to remove
+ * @param dryRun - If true, don't actually remove
+ * @returns true if removed successfully, false otherwise
+ */
 export async function removeItem(path: string, dryRun = false): Promise<boolean> {
+  // Protect system paths from being removed
+  if (isSystemPath(path)) {
+    console.warn(`Skipping protected system path: ${path}`);
+    return false;
+  }
+
   if (dryRun) {
     return true;
   }

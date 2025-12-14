@@ -13,6 +13,8 @@ const DEFAULT_SEARCH_PATHS = [
 
 const MIN_FILE_SIZE = 1024 * 1024;
 const DEFAULT_MAX_DEPTH = 5;
+/** Maximum number of files to collect before stopping to prevent memory issues */
+const MAX_FILES = 100_000;
 
 interface FileInfo {
   path: string;
@@ -28,17 +30,23 @@ export class DuplicatesScanner extends BaseScanner {
     const maxDepth = options?.maxDepth ?? DEFAULT_MAX_DEPTH;
     const searchPaths = options?.searchPaths ?? DEFAULT_SEARCH_PATHS;
     const filesBySize = new Map<number, FileInfo[]>();
+    const context = { fileCount: 0, limitReached: false };
 
     for (const searchPath of searchPaths) {
+      if (context.limitReached) break;
       if (await exists(searchPath)) {
-        await this.collectFiles(searchPath, filesBySize, minSize, maxDepth);
+        await this.collectFiles(searchPath, filesBySize, minSize, maxDepth, 0, context);
       }
     }
 
     const duplicates = await this.findDuplicates(filesBySize);
     const items = this.convertToCleanableItems(duplicates);
 
-    return this.createResult(items);
+    const result = this.createResult(items);
+    if (context.limitReached) {
+      result.error = `File limit reached (${MAX_FILES}). Some duplicates may not have been detected.`;
+    }
+    return result;
   }
 
   private async collectFiles(
@@ -46,14 +54,16 @@ export class DuplicatesScanner extends BaseScanner {
     filesBySize: Map<number, FileInfo[]>,
     minSize: number,
     maxDepth: number,
-    currentDepth = 0
+    currentDepth: number,
+    context: { fileCount: number; limitReached: boolean }
   ): Promise<void> {
-    if (currentDepth > maxDepth) return;
+    if (currentDepth > maxDepth || context.limitReached) return;
 
     try {
       const entries = await readdir(dir, { withFileTypes: true });
 
       for (const entry of entries) {
+        if (context.limitReached) break;
         if (entry.name.startsWith('.')) continue;
 
         const fullPath = join(dir, entry.name);
@@ -69,9 +79,14 @@ export class DuplicatesScanner extends BaseScanner {
                 modifiedAt: stats.mtime,
               });
               filesBySize.set(stats.size, files);
+              context.fileCount++;
+              if (context.fileCount >= MAX_FILES) {
+                context.limitReached = true;
+                break;
+              }
             }
           } else if (entry.isDirectory()) {
-            await this.collectFiles(fullPath, filesBySize, minSize, maxDepth, currentDepth + 1);
+            await this.collectFiles(fullPath, filesBySize, minSize, maxDepth, currentDepth + 1, context);
           }
         } catch {
           continue;

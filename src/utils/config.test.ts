@@ -50,7 +50,6 @@ describe('config utils', () => {
 
       expect(config.downloadsDaysOld).toBe(30);
       expect(config.largeFilesMinSize).toBe(500 * 1024 * 1024);
-      expect(config.backupEnabled).toBe(false);
       expect(config.parallelScans).toBe(true);
       expect(config.concurrency).toBe(4);
     });
